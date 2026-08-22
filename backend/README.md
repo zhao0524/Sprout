@@ -1,4 +1,9 @@
-# Sprout Backend (FastAPI)
+# Sprout Backend (FastAPI) — LEGACY
+
+> **Not the live backend.** Sprout's backend is now **n8n + Supabase** with no
+> custom API server — see [`../docs/backend.md`](../docs/backend.md). This FastAPI
+> service is an earlier implementation kept for reference and is not deployed. The
+> notes below describe that legacy server.
 
 Plan generation, estimates, weather proxy, World Labs (Marble) 3D generation, and
 the n8n webhook. Data access is through the Supabase client (secret key,

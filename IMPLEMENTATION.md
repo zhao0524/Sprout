@@ -4,6 +4,18 @@ A hackathon build plan for **Sprout**, an app that turns a yard, balcony, raised
 
 This document is written to be executed directly by coding agents and a four-person team. It favors demo reliability and integration speed over production infrastructure.
 
+> **⚠ Architecture superseded — backend is now n8n + Supabase.** The live backend
+> has **no custom API server** and **uses no external APIs**: automation runs on a
+> hosted n8n instance backed by Supabase, and the frontend only (1) POSTs JSON to
+> n8n webhooks and (2) reads Supabase tables directly. The FastAPI-based sections of
+> this plan — **§5 Architecture, §6 Responsibilities, §12 Endpoints, §18/§18b, §20
+> Deployment, §21 Environment** — describe an earlier implementation and are
+> superseded by **[`docs/backend.md`](./docs/backend.md)**, the authoritative backend
+> reference (all workflows, webhook paths, request bodies, tables, and the frontend
+> integration contract). The `backend/` FastAPI folder is legacy and not deployed.
+> The rest of this document (data model, optimizer heuristic, plan/grid UI, crop
+> data) still reflects the app.
+
 > **Status (built & deployed).** The core flow is live on Render — frontend
 > https://sprout-1-qckn.onrender.com, backend https://sprout-ldna.onrender.com.
 > Some decisions changed during the build; the most important divergences from
@@ -95,6 +107,10 @@ See Section 25 for the ordered checklist that turns this into work.
 ---
 
 ## 5. Simplified Architecture
+
+> **Superseded** — the live architecture is n8n + Supabase with no custom API
+> server; see [`docs/backend.md`](./docs/backend.md). The diagram below is the
+> earlier FastAPI design.
 
 ```mermaid
 flowchart TD
@@ -332,6 +348,10 @@ create policy "own images" on storage.objects
 ---
 
 ## 12. API Endpoints
+
+> **Superseded.** These describe the legacy FastAPI server. The live backend
+> exposes **n8n webhooks** and Supabase table reads instead — see
+> [`docs/backend.md`](./docs/backend.md).
 
 Base path `/api`. All non-public endpoints require `Authorization: Bearer <supabase_access_token>`. Errors use a consistent shape:
 
