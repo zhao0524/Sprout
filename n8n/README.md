@@ -1,24 +1,31 @@
-# n8n workflows
+# Sprout Automation Workflows (n8n Engine)
 
-n8n is Sprout's backend. Automation runs on a hosted n8n instance backed by
-Supabase — there is no custom API server and no external APIs.
+n8n powers Sprout's event-driven and scheduled automation backend. All workflow logic executes on a managed n8n engine tightly integrated with Supabase (PostgreSQL) — orchestrating dynamic garden operations, intelligent crop replanning, environmental impact modeling, seed marketplace matching, and closed-loop agronomic learning.
 
-**Webhook base URL:** `https://davidzhao0524.app.n8n.cloud/webhook/`
+**Webhook Base URL:** `https://davidzhao0524.app.n8n.cloud/webhook/`
 
-Event-driven flows the frontend POSTs to:
+---
 
-- `POST /sprout/weather` — Weather Condition Automation
-- `POST /sprout/failed-crop` — Failed Crop Replanning
-- `POST /sprout/harvest` — Environmental Impact Tracking
-- `POST /sprout/seed-match` — Smart Seed Marketplace Matching
-- `POST /sprout/seed-redistribute` — Leftover Seed Redistribution
+## Event-Driven Workflows (Client-Triggered)
 
-Scheduled flows (daily 07:00 America/Toronto, no frontend call): Planting
-Reminders, Daily Action Engine, Closed-Loop Learning.
+- `POST /sprout/weather` — **Weather Condition Automation**: Evaluates real-time environmental conditions and generates prioritized garden care tasks.
+- `POST /sprout/failed-crop` — **Dynamic Crop Replanning**: Re-optimizes the remaining space-time grid upon crop loss, selecting viable companion successors.
+- `POST /sprout/harvest` — **Environmental Impact Tracking**: Dynamically computes cumulative water savings, carbon offsets, and organic food yields upon harvest logging.
+- `POST /sprout/seed-match` — **Smart Seed Marketplace Matching**: Ranks and pairs garden crop requirements with available active community listings.
+- `POST /sprout/seed-redistribute` — **Leftover Seed Redistribution**: Publishes community surplus seed listings and notifies compatible local growers.
 
-**Full reference** — request bodies, tables read/written, error behaviour, the
-fetch-then-branch upsert pattern, and the frontend integration contract — is in
-[`../docs/backend.md`](../docs/backend.md).
+---
 
-`weather-workflow.json` is an exported workflow kept for reference; the live
-workflows run on the hosted instance above.
+## Scheduled Workflows (Automated Engine)
+
+Executed daily at **07:00 America/Toronto**:
+
+1. **Planting Reminders** — Monitors upcoming plant dates across all active garden plans and emits personalized notifications.
+2. **Daily Action Engine** — Dynamically scans active gardens and evaluates care requirements, generating prioritized daily tasks.
+3. **Closed-Loop Agronomic Learning** — Aggregates historical garden outcome events, dynamically computing localized crop success rates and yield benchmarks per sunlight and seasonal condition.
+
+---
+
+## Documentation Reference
+
+For comprehensive request schemas, database operations, error handling, and integration contracts, see [`../docs/backend.md`](../docs/backend.md).

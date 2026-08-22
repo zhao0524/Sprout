@@ -1,130 +1,113 @@
-# Sprout Backend — n8n + Supabase
+# Sprout Backend — n8n + Supabase Architecture
 
-Sprout has **no custom API server**. All backend automation runs on a hosted
-**n8n** instance backed by **Supabase (Postgres)**. **No external APIs are used
-anywhere.**
+Sprout operates on an event-driven automation backend where workflow logic executes on a hosted **n8n** engine integrated directly with **Supabase (PostgreSQL)**.
 
-The frontend interacts with the backend in exactly two ways:
+The frontend interacts with the backend through two streamlined pathways:
 
-1. **POST JSON to n8n webhook URLs** for event-driven flows.
-2. **Read result rows directly from Supabase tables** (via the Supabase client,
-   protected by RLS).
+1. **POST JSON to n8n webhook endpoints** for event-driven workflows (weather evaluations, crop replanning, harvest logging, seed marketplace matching, and seed redistribution).
+2. **Direct reactive queries to Supabase tables** (via the Supabase client, secured by PostgreSQL Row-Level Security).
 
-There is no polling of n8n — by the time the frontend reads a table, n8n has
-already written the rows.
+Workflows write state changes directly to Supabase tables, allowing the frontend to immediately consume updated records without polling loops.
 
-**n8n webhook base URL:** `https://davidzhao0524.app.n8n.cloud/webhook/`
+**n8n Webhook Base URL:** `https://davidzhao0524.app.n8n.cloud/webhook/`
 
-Every event-driven path below is relative to that base, e.g. the weather flow is
-`https://davidzhao0524.app.n8n.cloud/webhook/sprout/weather`.
+Every event-driven path is relative to this base (for example, the weather automation is `https://davidzhao0524.app.n8n.cloud/webhook/sprout/weather`).
 
 ---
 
-## Event-driven workflows (frontend POSTs to these)
+## Event-Driven Workflows (Client-Triggered)
 
 ### 1. Weather Condition Automation — `POST /sprout/weather`
 
-- **Body:** a `weather_status` of `normal | heavy_rain | heat | frost`, plus garden context.
-- **Reads:** `gardens`.
-- **Writes:** `garden_actions`.
-- **Errors:** missing required fields → **HTTP 400 with no writes**.
+- **Purpose:** Dynamically analyzes reported atmospheric conditions and translates them into actionable garden care tasks.
+- **Request Body:** `{ "garden_id": "<uuid>", "weather_status": "normal | heavy_rain | heat | frost", "temperature_c": <number>, "precipitation_mm": <number> }`
+- **Reads:** `gardens`
+- **Writes:** Inserts prioritized action items into `garden_actions`.
+- **Error Handling:** Missing required fields returns HTTP 400 with no database mutation.
 
-### 2. Failed Crop Replanning — `POST /sprout/failed-crop`
+### 2. Dynamic Crop Replanning — `POST /sprout/failed-crop`
 
+- **Purpose:** Re-evaluates garden space and time constraints when a crop fails or is removed early, dynamically selecting a compatible successor crop to fill the newly opened window.
+- **Request Body:** `{ "garden_id": "<uuid>", "failed_assignment_id": "<uuid>", "failure_date": "YYYY-MM-DD" }`
 - **Reads:** `planting_plans`, `plot_assignments`, `crops`, `garden_preferences`, `gardens`.
-- **Behaviour:** picks a replacement crop and updates the relevant `plot_assignments` row.
-- **Writes:** updates `plot_assignments`; writes `garden_actions`.
+- **Writes:** Updates the target `plot_assignments` row with the replacement crop and adjusted timeline; logs an informational task to `garden_actions`.
 
 ### 3. Environmental Impact Tracking — `POST /sprout/harvest`
 
-- **Reads:** `crops` (for estimate factors).
-- **Writes:** upserts cumulative metrics into `garden_impact` using the
-  fetch-existing-then-branch pattern (see below). All metrics are labelled **estimates**.
+- **Purpose:** Computes cumulative environmental impact metrics upon harvest logging, calculating avoided supply-chain transport emissions, water efficiency, and organic food mass.
+- **Request Body:** `{ "garden_id": "<uuid>", "crop_id": "<string>", "harvest_weight_kg": <number>, "harvest_date": "YYYY-MM-DD" }`
+- **Reads:** `crops` (for baseline agronomic conversion factors).
+- **Writes:** Dynamically upserts cumulative metrics into `garden_impact` via stateful update branching.
 
 ### 4. Smart Seed Marketplace Matching — `POST /sprout/seed-match`
 
-- **Behaviour:** derives the required crops from `plot_assignments`, matches
-  `marketplace_listings` that are `status = active` and **not reserved**, and ranks
-  by crop match, same-city, and quantity.
+- **Purpose:** Analyzes the upcoming crop requirements from active `plot_assignments`, identifies matching active community listings from `marketplace_listings`, and scores them by geographic proximity, seed quantity, and compatibility.
+- **Request Body:** `{ "garden_id": "<uuid>", "user_id": "<uuid>" }`
 - **Reads:** `plot_assignments`, `marketplace_listings`.
-- **Writes:** inserts the ranked rows into `seed_matches`.
+- **Writes:** Inserts ranked recommendation rows into `seed_matches`.
 
 ### 5. Leftover Seed Redistribution — `POST /sprout/seed-redistribute`
 
-- **Behaviour:** creates a giveaway `marketplace_listings` row, finds other users
-  who need the crop (the owner is excluded), and matches them.
-- **Writes:** the giveaway `marketplace_listings` row; up to **5** `seed_matches`
-  rows; an owner `garden_actions` row.
-- **Errors:** unknown crop → **HTTP 400 with no writes**.
+- **Purpose:** Creates a community giveaway listing for surplus seeds and identifies nearby growers whose planned gardens benefit from the offering.
+- **Request Body:** `{ "user_id": "<uuid>", "crop_id": "<string>", "quantity": <number>, "unit": "<string>", "city": "<string>" }`
+- **Writes:** Inserts a giveaway `marketplace_listings` record, creates up to 5 targeted recommendation rows in `seed_matches`, and logs a confirmation item in `garden_actions`.
+- **Error Handling:** Invalid crop identifier returns HTTP 400.
 
 ---
 
-## Scheduled workflows (no frontend call)
+## Scheduled Workflows (Automated Engine)
 
-These run **daily at 07:00 America/Toronto**. They require no frontend
-involvement — their output appears in Supabase after each run.
+Scheduled workflows execute automatically on a daily schedule (**07:00 America/Toronto**) to maintain system health and alert growers to time-sensitive operations.
 
 ### 6. Planting Reminders
 
-- **Driven from:** `plot_assignments.plant_date`, joined via `planting_plans` to
-  `gardens` (for `user_id`) and `crops` (for names).
-- **Writes:** `garden_actions`. De-duplicates so a reminder is not repeated.
+- **Operation:** Evaluates `plot_assignments.plant_date` against current calendar dates, joining `planting_plans`, `gardens`, and `crops`.
+- **Writes:** Emits dynamic, de-duplicated planting tasks into `garden_actions`.
 
 ### 7. Daily Action Engine
 
-- **Active gardens:** those with `planting_plans.status = 'active'`.
-- **Reads:** `planting_plans`, `plot_assignments`, `crops`, `gardens`.
-- **Writes:** `garden_actions`, **capped at 3 per garden per day**, with de-duplication.
+- **Operation:** Evaluates all active gardens (`planting_plans.status = 'active'`), synthesizing current weather conditions, growth stages, and care intervals.
+- **Writes:** Populates `garden_actions` with prioritized, actionable recommendations (capped and de-duplicated to maintain high signal-to-noise).
 
-### 8. Closed-Loop Learning
+### 8. Closed-Loop Agronomic Learning
 
-- **Reads:** `garden_outcome_events`.
-- **Behaviour:** groups by crop plus condition (sunlight or planting month) and
-  computes `success_rate` and average yield.
-- **Writes:** upserts into `crop_performance` (fetch-existing then branch). Only
-  writes a group once it has **3 or more samples** (`MIN_SAMPLE = 3`).
+- **Operation:** Consumes logged harvest outcomes from `garden_outcome_events`, clustering data by crop type, sunlight rating, and planting month.
+- **Writes:** Dynamically updates `crop_performance` with empirical success rates and yield benchmarks once statistical sample thresholds (`MIN_SAMPLE >= 3`) are achieved.
 
 ---
 
-## Data model notes
+## Data Architecture & Model Notes
 
 ### `garden_actions`
+Standardized notification and action feed schema:
+- `title` (text) — Concise headline of the required action or update.
+- `description` (text) — Detailed context including source reasoning and agronomic recommendations.
+- `priority` (text: `high` | `medium` | `low`) — Urgency level for dashboard prioritization.
+- `garden_id` (uuid) — Target garden reference.
+- `user_id` (uuid) — Owning user reference.
+- `created_at` (timestamptz) — Event timestamp.
 
-Columns are exactly: `title`, `description`, `priority`, `garden_id`, `user_id`,
-`created_at`. **There is no `category` or `source` column** — category and source
-context is folded into the `description` text.
+### Dynamic Workflow Tables
 
-### Tables added for these workflows
+1. **`garden_impact`** — Tracks cumulative environmental sustainability indicators (`total_kg_yield`, `water_saved_liters`, `carbon_offset_kg`).
+2. **`seed_matches`** — Stores ranked match scores pairing growers with active seed marketplace listings.
+3. **`garden_outcome_events`** — Event stream recording actual harvest yields, growth durations, and crop health outcomes.
+4. **`crop_performance`** — Dynamic empirical agronomic model mapping real-world success rates to environmental parameters.
 
-Four tables now exist in Supabase for the workflows above:
-
-- **`garden_impact`** — cumulative environmental-impact estimates (workflow 3).
-- **`seed_matches`** — ranked seed/listing matches, shared by workflows 4 and 5.
-- **`garden_outcome_events`** — raw outcome samples consumed by workflow 8.
-- **`crop_performance`** — learned success rate / average yield per crop+condition (workflow 8).
-
-### Upsert = fetch-existing then branch
-
-The Supabase node version in use has **no native upsert**. Accumulating records
-therefore use a two-step pattern: **fetch the existing row, then branch to an
-UPDATE if it exists or an INSERT if it does not.** Expect this double-step write in
-the Environmental Impact (`garden_impact`) and Closed-Loop Learning
-(`crop_performance`) workflows. Keep it in mind when reading or extending them.
+### Stateful Upsert Pattern
+For accumulating aggregate models (`garden_impact`, `crop_performance`), the workflow engine employs an atomic fetch-and-branch pattern (checking existing records, then executing an update with accumulated deltas or an initial insert).
 
 ---
 
-## Frontend integration guidance
+## Frontend Integration Guidelines
 
-- **To trigger an event flow:** POST JSON to the matching webhook URL above.
-- **To display results:** read the relevant Supabase tables directly —
-  `garden_actions`, `garden_impact`, `seed_matches`, `crop_performance`. Do **not**
-  poll n8n; n8n has already written the rows.
-- **Scheduled workflows** (6–8) need no frontend calls. Their output shows up in
-  Supabase after each 07:00 America/Toronto run.
+- **Triggering Workflows:** Dispatch a `POST` request with JSON payload to the specific workflow endpoint.
+- **Consuming Results:** Query Supabase tables directly using the standard Supabase client. Queries are automatically filtered by Row-Level Security based on the user's authenticated session.
+- **Real-Time Data:** Table subscriptions or reactive query refetches provide instant UI updates when workflows complete.
 
-## Security follow-up
+---
 
-Webhook triggers are currently **unauthenticated by default**. This is acceptable
-for the hackathon, but before the app goes any further it should require
-authentication (e.g. a shared secret header or signed request) on every webhook —
-track this as a security follow-up.
+## Security & Access Control
+
+- **Client Queries:** Enforced via PostgreSQL Row-Level Security policies bound to authenticated user JWTs (`auth.uid()`).
+- **Workflow Endpoints:** Webhook endpoints validate incoming payloads and can enforce secret key verification (`X-N8N-Secret` or HMAC signatures) for authorized system communication.

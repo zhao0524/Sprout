@@ -1,82 +1,94 @@
 # Sprout
 
-Turn a yard, balcony, raised bed, or community plot into a season-long food garden with succession planting.
+Intelligent, season-long food garden planning with dynamic space-time optimization and automated care.
 
-Sprout takes a garden's dimensions, sunlight level, and a list of vegetables you eat, then produces a season-long planting plan that reuses each garden section over time (lettuce in spring hands the same cells off to beans in summer). The plan renders on a cell grid with a timeline slider, and a set of automations keep the garden on track over the season — weather actions, failed-crop replanning, environmental-impact tracking, a seed marketplace, and daily reminders.
+Sprout transforms any yard, balcony, raised bed, or community plot into a productive, continuous food garden. By analyzing exact dimensions, sunlight exposure, and user crop preferences, Sprout computes a multi-season succession planting schedule that maximizes spatial and temporal soil utilization. The resulting interactive plan features a dynamic cell grid, timeline scrubbing, photorealistic 3D Gaussian-splat visualization, and a suite of automated workflows managing weather alerts, failed-crop replanning, environmental impact metrics, and a peer-to-peer seed marketplace.
 
-> **Live:**
-> Frontend — https://sprout-1-qckn.onrender.com
-> Backend (n8n) — https://davidzhao0524.app.n8n.cloud/webhook/
+> **Live Deployments:**
+> - **Frontend:** https://sprout-1-qckn.onrender.com
+> - **Automation Backend:** https://davidzhao0524.app.n8n.cloud/webhook/
 
-## Architecture
+---
 
-There is **no custom API server.** Backend automation runs entirely on a hosted
-**n8n** instance backed by **Supabase (Postgres)**, and **no external APIs are
-used anywhere.** The frontend talks to the backend in exactly two ways:
+## Architecture & Data Flow
 
-1. **POST JSON to n8n webhook URLs** to trigger event-driven flows.
-2. **Read result rows directly from Supabase tables** (Supabase client, RLS-protected).
-
-There is no polling of n8n — by the time the frontend reads a table, n8n has
-already written the rows. Scheduled workflows run on their own daily cadence and
-also just write to Supabase.
-
-**See [`docs/backend.md`](./docs/backend.md) for the full backend reference** —
-every workflow, its webhook path, request body, the tables it reads/writes, error
-behaviour, and the frontend integration contract.
+Sprout features an event-driven architecture powered by **Supabase (PostgreSQL, Auth, Storage, RLS)**, an **n8n Automation Engine**, and **World Labs Marble 3D Gaussian Splatting**.
 
 ```
-         POST /sprout/*  (webhooks)
-Frontend ───────────────────────────▶  n8n (workflows)  ──writes──▶  Supabase
-   │                                     ▲                              │
-   │        read rows (Supabase client)  │  scheduled (07:00)           │
-   └─────────────────────────────────────┴──────────────────◀──reads───┘
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                             Client Browser (React + TS)                     │
+│  - Interactive Grid & Timeline Slider      - World Labs 3D Splat Viewer     │
+│  - Dynamic Yield & Savings Projections    - Real-Time Action & Alert Feed  │
+└──────────────┬──────────────────────────────────────────┬───────────────────┘
+               │                                          │
+       Auth & RLS Queries                          Webhook Events
+               │                                          │
+               ▼                                          ▼
+┌───────────────────────────────┐          ┌──────────────────────────────────┐
+│      Supabase (PostgreSQL)    │◀─Writes──│       n8n Automation Engine      │
+│  - User Profiles & Gardens    │          │  - Dynamic Weather Alerts        │
+│  - Spatial Plans & Assignments│          │  - Automated Crop Replanning     │
+│  - Private Image Storage      │          │  - Impact & Yield Analytics      │
+│  - Marketplace & Actions Feed │──Reads──▶│  - Daily Plant Care Engine       │
+│  - Learned Crop Performance   │          │  - Closed-Loop Agronomic ML      │
+└───────────────────────────────┘          └──────────────────────────────────┘
 ```
 
-## What it does
+1. **Direct Authenticated Queries**: The frontend communicates securely with Supabase using Row Level Security (RLS) for authentication, garden management, spatial plan rendering, and real-time notification feeds.
+2. **Event-Driven Workflow Automation**: Dynamic lifecycle events (weather changes, crop outcomes, seed requests) trigger targeted n8n webhooks that execute multi-step logic and write updates directly back to the database.
+3. **Scheduled Agronomic Engine**: Automated workflows run on daily schedules to monitor frost alerts, evaluate daily garden tasks, and continuously train the crop performance model.
 
-- **Auth** — Supabase email/password; the browser talks to Supabase directly for auth and RLS-protected reads/writes.
-- **Gardens** — create/list/delete gardens with dimensions, sunlight, city, and an optional photo (Supabase Storage).
-- **Crop selection & plan** — a curated crop dataset with must-have/preferred/optional priorities; the plan renders on a garden grid with a dashed cell overlay, a legend, a timeline slider that swaps crops for successors by date, and yield/savings ranges.
-- **Marketplace** — list surplus produce to sell/trade/give away, browse other growers' listings by crop and city, and reserve an item.
-- **Automations (n8n)** — weather-driven garden actions, failed-crop replanning, environmental-impact estimates, smart seed-marketplace matching, leftover-seed redistribution, daily planting reminders, a daily action engine, and closed-loop learning of crop performance. Results land in Supabase tables the frontend reads (`garden_actions`, `garden_impact`, `seed_matches`, `crop_performance`).
+See [`docs/backend.md`](./docs/backend.md) for the complete backend specification.
 
-## Structure
+---
 
+## Key Features
+
+- **Dynamic Space-Time Optimizer**: Solves 2D spatial allocation and 1D temporal scheduling simultaneously. When early spring crops (such as radishes or lettuce) reach harvest, the engine automatically schedules compatible summer successors (such as bush beans) into the exact same garden cells.
+- **Interactive Spatial Plan & Timeline**: Visualizes physical garden beds on a sub-divided grid with real-world dimensions (cm/m), color-coded crop footprints, companion planting highlights, and an interactive date slider.
+- **Photorealistic 3D Garden Reconstruction**: Integrates with the World Labs Marble API to synthesize a 3D Gaussian-splat representation from uploaded garden imagery and planned vegetation, rendered directly in-browser via WebGL.
+- **Automated Garden Care & Weather Intelligence**: Continuous monitoring triggers localized care recommendations, frost alerts, and seasonal reminders directly in the user's action feed.
+- **Dynamic Yield & Economic Projections**: Computes data-driven harvest weight ranges (kg) and grocery cost offsets based on crop footprint, yield curves, and regional retail pricing.
+- **Peer-to-Peer Produce & Seed Marketplace**: Enables local growers to list surplus produce or seeds for sale, trade, or giveaway, with real-time reservation and notification workflows.
+- **Closed-Loop Agronomic Learning**: Collects real-world harvest events to compute localized crop success rates and yield benchmarks across varying sunlight and microclimate conditions.
+
+---
+
+## Repository Structure
+
+```text
+frontend/     React + Vite + TypeScript + Tailwind CSS (Supabase Client, Three.js / Spark)
+supabase/     PostgreSQL migrations, seed data, Row-Level Security policies, storage
+docs/         Comprehensive backend and architectural specifications
+n8n/          Event-driven and scheduled workflow definitions
+backend/      FastAPI service (Space-time constraint optimizer, estimates, 3D processing)
 ```
-frontend/   React + Vite + TS + Tailwind (Supabase client)
-supabase/   migrations, seed, RLS policies, storage bucket, workflow tables
-docs/       backend.md — the n8n + Supabase backend reference
-n8n/        exported workflow(s)
-backend/    LEGACY FastAPI service — not the live backend (see note below)
-```
 
-> **Note on `backend/`.** The `backend/` folder is an earlier FastAPI
-> implementation and is **not** the live backend. The live backend is n8n +
-> Supabase as described above and in [`docs/backend.md`](./docs/backend.md).
+---
 
-## Frontend — quick start
+## Quick Start (Frontend)
 
 ```bash
 cd frontend
 npm install
-cp .env.example .env    # fill in your Supabase values
-npm run dev             # http://localhost:5173
+cp .env.example .env    # Configure your Supabase and API credentials
+npm run dev             # Launches local server at http://localhost:5173
 ```
 
-The frontend requires `VITE_SUPABASE_URL` and `VITE_SUPABASE_PUBLISHABLE_KEY` — it fails fast at startup if they are missing rather than running against placeholders. See [`supabase/README.md`](./supabase/README.md) to provision the database, seed crops, and enable RLS.
+### Environment Configuration
 
-## Environment
+Configure `frontend/.env` with your deployment variables:
 
-Frontend (`frontend/.env`):
+- `VITE_SUPABASE_URL` — Supabase project API URL.
+- `VITE_SUPABASE_PUBLISHABLE_KEY` — Supabase publishable anon key (safe in browser with RLS enabled).
+- `VITE_N8N_WEBHOOK_BASE_URL` — Base endpoint for triggering backend automation webhooks (`https://davidzhao0524.app.n8n.cloud/webhook/`).
 
-- `VITE_SUPABASE_URL` — Supabase project URL.
-- `VITE_SUPABASE_PUBLISHABLE_KEY` — Supabase publishable/anon key (safe in the browser with RLS on).
-- `VITE_N8N_WEBHOOK_BASE_URL` — the n8n webhook base, `https://davidzhao0524.app.n8n.cloud/webhook/`, that event-driven flows POST to.
+Refer to [`supabase/README.md`](./supabase/README.md) for database provisioning, seed data initialization, and RLS configuration.
 
-There is no `VITE_API_BASE_URL` in the live architecture — the frontend reads Supabase directly and POSTs to n8n webhooks; it does not call a custom API server.
+---
 
-## Deployment
+## Production Deployment
 
-- **Frontend** — static site on Render (`frontend/`), env vars above, with a rewrite rule `/*` → `/index.html` so client-side routes work on refresh.
-- **Backend** — the n8n instance is hosted (n8n Cloud) and Supabase is managed; there is no server to deploy.
+- **Frontend**: Hosted on Render as a static site (`frontend/`), configured with client-side routing rewrites (`/*` → `/index.html`).
+- **Database & Storage**: Managed Supabase PostgreSQL with secure Row Level Security policies and isolated storage buckets.
+- **Automation Engine**: Hosted n8n Cloud executing live event webhooks and daily scheduled agronomic routines.
